@@ -1,6 +1,7 @@
 import express from "express";
 import { Request, Response } from "express";
 import { query } from "./config/db";
+import userRouter from "./routers/userRouter";
 
 
 const PORT : number = Number(process.env.PORT) | 3000;
@@ -8,6 +9,7 @@ const app = express();
 
 
 app.use(express.json());
+app.use("/", userRouter);
 
 app.get('/test-db', async (req: Request, res: Response) => {
   try {

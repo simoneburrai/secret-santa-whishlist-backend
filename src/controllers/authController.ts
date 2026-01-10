@@ -1,0 +1,93 @@
+import { Response, Request, NextFunction } from "express";
+import pool from "../config/db";
+import type { User } from "../types";
+import bcrypt from "bcryptjs";
+
+async function registration(req: Request, res: Response, _next: NextFunction): Promise<void> {
+
+    const user: User = req.body;
+    const { email, password, name} = user;
+
+    if( !email || !password || !name) {
+        res.status(400).json({msg: "Errore nell'inserimento dei dati, dati mancanti"});
+        return;
+    }
+   
+        try {
+        const existingUser = await pool.query('SELECT * FROM users WHERE email=$1', [email]);
+
+        if(existingUser.rowCount && existingUser.rowCount > 0){
+            res.status(409).json({msg: "Esiste già un utente corrispondente a quest'email"})
+            return;
+        }
+
+         const salt = await bcrypt.genSalt(10);
+         const password_hash = await bcrypt.hash(password, salt);
+         const creationQuery = `
+            INSERT INTO users (name, email, password) 
+            VALUES ($1, $2, $3) 
+            RETURNING id, name, email, created_at
+        `;
+         const newUser = await pool.query(creationQuery, [name, email, password_hash]);
+
+        if(newUser.rowCount && newUser.rowCount > 0){
+            res.status(201).json({msg: "Creazione User avvenuta con successo", user: newUser.rows[0]})
+            return;
+        }else {
+            throw new Error("Il database non ha confermato l'inserimento");
+        }
+         
+    }
+    catch(error){
+        console.error("ERRORE REGISTRAZIONE:", error);
+        res.status(500).json({ 
+            msg: "Si è verificato un errore interno durante la registrazione" 
+        });
+    }
+}
+
+async function login(req: Request, res: Response, _next: NextFunction): Promise<void> {
+
+    const credentials: Pick<User, 'email' | 'password'> = req.body;
+    const { email, password} = credentials;
+
+    if( !email || !password ) {
+        res.status(400).json({msg: "Errore nell'inserimento dei dati, dati mancanti"});
+        return;
+    }
+   
+        try {
+        const result = await pool.query('SELECT * FROM users WHERE email=$1', [email]);
+
+        if(result.rowCount === 0 ){
+            res.status(409).json({msg: "Credenziali non valide"})
+            return;
+        }
+
+        const user = result.rows[0];
+        const isMatch: boolean = await bcrypt.compare(password, user.password);
+        if(!isMatch){
+            res.status(401).json({msg: "Credenziali non valide"});
+            return;
+        }
+
+        res.status(200).json({ 
+            msg: "Login effettuato", 
+            user: { id: user.id, name: user.name, email: user.email } 
+        });
+         
+    }
+    catch(error){
+        console.error("ERRORE LOGIN:", error);
+        res.status(500).json({ 
+            msg: "Si è verificato un errore interno durante il login" 
+        });
+    }
+}
+
+
+
+export {
+    registration,
+    login
+}
