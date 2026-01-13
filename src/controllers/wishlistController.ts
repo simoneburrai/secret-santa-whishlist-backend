@@ -73,8 +73,40 @@ async function createWishlist(req: Request, res: Response, _next: NextFunction){
     }
     
 
+async function getPublicWishlist(req: Request, res: Response) {
+    const { token } = req.params; 
+
+    try {
+
+        const result = await pool.query(
+            `SELECT w.name as wishlist_name, g.* FROM wishlists w
+             JOIN gift g ON w.id = g.wishlist_id
+             WHERE w.share_token = $1 AND w.is_published = true`,
+            [token]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ msg: "Wishlist non trovata o non ancora pubblicata" });
+        }
+
+    
+        const wishlistData = {
+            name: result.rows[0].wishlist_name,
+            gifts: result.rows.map(row => {
+                const { wishlist_name, ...giftData } = row;
+                return giftData;
+            })
+        };
+
+        res.status(200).json(wishlistData);
+    } catch (error) {
+        res.status(500).json({ msg: "Errore nel recupero della wishlist" });
+    }
+}
+
 
 
 export {
-    createWishlist
+    createWishlist,
+    getPublicWishlist
 }
