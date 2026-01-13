@@ -1,8 +1,8 @@
 import { Response, Request, NextFunction } from "express";
 import pool from "../config/db";
-import type { Wishlist, Gift } from "../types";
+import type { Wishlist} from "../types";
 
-async function createWishlist(req: Request, res: Response, _next: NextFunction){
+async function createWishlist(req: Request, res: Response, _next: NextFunction): Promise<void>{
 
     const client = await pool.connect();
 
@@ -73,7 +73,7 @@ async function createWishlist(req: Request, res: Response, _next: NextFunction){
     }
     
 
-async function getPublicWishlist(req: Request, res: Response) {
+async function getPublicWishlist(req: Request, res: Response): Promise<void> {
     const { token } = req.params; 
 
     try {
@@ -86,7 +86,8 @@ async function getPublicWishlist(req: Request, res: Response) {
         );
 
         if (result.rowCount === 0) {
-            return res.status(404).json({ msg: "Wishlist non trovata o non ancora pubblicata" });
+            res.status(404).json({ msg: "Wishlist non trovata o non ancora pubblicata" });
+            return;
         }
 
     
@@ -104,7 +105,7 @@ async function getPublicWishlist(req: Request, res: Response) {
     }
 }
 
-async function deleteWishlist(req: Request, res: Response){
+async function deleteWishlist(req: Request, res: Response): Promise<void>{
     const {id} = req.params;
 
     try {
@@ -136,7 +137,7 @@ async function deleteWishlist(req: Request, res: Response){
     }
 }
 
-async function updateWishlist(req: Request, res: Response){
+async function updateWishlist(req: Request, res: Response): Promise<void>{
 
 }
 
