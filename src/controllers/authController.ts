@@ -2,6 +2,10 @@ import { Response, Request, NextFunction } from "express";
 import pool from "../config/db";
 import type { User } from "../types";
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
+
+
+const JWT_SECRET: string = process.env.JWT_SECRET!;
 
 async function registration(req: Request, res: Response, _next: NextFunction): Promise<void> {
 
@@ -71,9 +75,15 @@ async function login(req: Request, res: Response, _next: NextFunction): Promise<
             return;
         }
 
+        const token = jwt.sign(
+        { id: user._id, email: user.email }, 
+        JWT_SECRET, 
+        { expiresIn: '24h' } // Il token scade dopo un giorno
+    );
         res.status(200).json({ 
             msg: "Login effettuato", 
-            user: { id: user.id, name: user.name, email: user.email } 
+            user: { id: user.id, name: user.name, email: user.email },
+            token: token
         });
          
     }
