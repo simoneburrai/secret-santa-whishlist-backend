@@ -15,6 +15,8 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
             return;
         }
 
+        const userId : number = Number(req.user.id);
+
         // 1. Parsing sicuro dei regali
         const { name } = req.body;
         let gifts = req.body.gifts;
@@ -30,10 +32,11 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
         const newWishlist = await client.query(
             `INSERT INTO wishlists (name, user_id, is_published) 
              VALUES ($1, $2, $3) RETURNING id, share_token`, 
-            [name, req.user.id, true]
+            [name, userId, true]
         );
         
-        const wishlistId = newWishlist.rows[0].id;
+        const wishlistId = newWishlist.rows[0].id; // Questo lo avevi già
+
 
         for (let i = 0; i < gifts.length; i++) {
             const gift = gifts[i];
@@ -46,7 +49,7 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
                 `INSERT INTO gifts (wishlist_id, name, price, priority, link, notes, image_url) 
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [
-                    wishlistId, 
+                    wishlistId,
                     gift.name, 
                     gift.price, 
                     gift.priority, 
@@ -71,14 +74,24 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
 
 async function getPublicWishlist(req: Request, res: Response): Promise<void> {
     const { token } = req.params; 
-    const protocol = req.protocol; // http o https
-    const host = req.get('host');  // localhost:3000 o il tuo dominio
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
 
     try {
         const result = await pool.query(
-            `SELECT w.name as wishlist_name, g.* FROM wishlists w
-             JOIN gift g ON w.id = g.wishlist_id
-             WHERE w.share_token = $1 AND w.is_published = true`,
+            `SELECT 
+                w.id AS wishlist_id, 
+                w.name AS wishlist_name, 
+                w.user_id AS owner_id,
+                g.id AS gift_id,
+                g.name AS gift_name,
+                g.price,
+                g.priority,
+                g.link,
+                g.notes,
+                g.image_url
+            FROM wishlists w
+            LEFT JOIN gifts g ON w.id = g.wishlist_id
+            WHERE w.share_token = $1 AND w.is_published = true`,
             [token]
         );
 
@@ -88,22 +101,28 @@ async function getPublicWishlist(req: Request, res: Response): Promise<void> {
         }
 
         const wishlistData = {
+            id: result.rows[0].wishlist_id,
             name: result.rows[0].wishlist_name,
-            gifts: result.rows.map(row => {
-                const imageUrl = row.image 
-                    ? `${protocol}://${host}/${row.image.replace(/\\/g, '/')}` 
-                    : null;
-
-                return {
-                    ...row,
-                    image_url: imageUrl 
-                };
-            })
+            gifts: result.rows
+                .filter(row => row.gift_id !== null)
+                .map(row => ({
+                    id: row.gift_id,
+                    name: row.gift_name,
+                    price: row.price,
+                    priority: row.priority,
+                    link: row.link,
+                    notes: row.notes,
+                    // Sostituisce i backslash con slash e rimuove eventuali doppi slash
+                    image: row.image 
+                        ? `${baseUrl}/${row.image.replace(/\\/g, '/').replace(/^\/+/, '')}` 
+                        : null
+                }))
         };
 
         res.status(200).json(wishlistData);
     } catch (error) {
-        res.status(500).json({ msg: "Errore nel recupero della wishlist" });
+        console.error("ERRORE SERVER:", error); // Controlla questo log nel terminale del backend!
+        res.status(500).json({ msg: "Errore interno nel recupero della wishlist" });
     }
 }
 
@@ -176,7 +195,7 @@ async function getMyWishlists(req: AuthenticatedRequest , res: Response): Promis
         // Recuperiamo le preferite (assumendo che tu abbia un array o una tabella pivot)
         const favoritesResult  = await pool.query(
             `SELECT w.* FROM wishlists w
-                 JOIN favorite_whishlists f ON w.id = f.wishlist_id
+                 JOIN favorites f ON w.id = f.wishlist_id
                  WHERE f.user_id = $1`, [userId]
         );
 
