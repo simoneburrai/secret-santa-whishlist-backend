@@ -7,7 +7,7 @@ import upload from "../utility/multer";
 
 const wishlistRouter = Router();
 
-wishlistRouter.post("/", authMiddleware, upload.array("images"), createWishlist);
+wishlistRouter.post("/", authMiddleware, upload.any(), createWishlist);
 wishlistRouter.get("/public/:token", getPublicWishlist);
 wishlistRouter.delete("/:id", authMiddleware, deleteWishlist);
 wishlistRouter.put("/:id", authMiddleware, updateWishlist);

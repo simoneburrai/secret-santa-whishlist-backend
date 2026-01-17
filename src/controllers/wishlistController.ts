@@ -15,12 +15,18 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
             return;
         }
 
-        const { name, gifts } = req.body; 
-        const files = req.files as Express.Multer.File[];
+        // 1. Parsing sicuro dei regali
+        const { name } = req.body;
+        let gifts = req.body.gifts;
+        if (typeof gifts === "string") {
+            gifts = JSON.parse(gifts);
+        }
+
+        // 2. Fallback per i file per evitare il crash
+        const files = (req.files as Express.Multer.File[]) || [];
 
         await client.query('BEGIN');
 
-        // 1. Inserimento Wishlist
         const newWishlist = await client.query(
             `INSERT INTO wishlists (name, user_id, is_published) 
              VALUES ($1, $2, $3) RETURNING id, share_token`, 
@@ -32,11 +38,12 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
         for (let i = 0; i < gifts.length; i++) {
             const gift = gifts[i];
             
-         
-            const imagePath = files[i] ? files[i]!.path : null;
+            // Ora .find() non fallirà perché files è almeno un array vuoto []
+            const giftFile = files.find(f => f.fieldname === `gift_image_${i}`);
+            const imagePath = giftFile ? giftFile.path : null;
 
             await client.query(
-                `INSERT INTO gift (wishlist_id, name, price, priority, link, notes, image) 
+                `INSERT INTO gifts (wishlist_id, name, price, priority, link, notes, image_url) 
                  VALUES ($1, $2, $3, $4, $5, $6, $7)`,
                 [
                     wishlistId, 
@@ -45,7 +52,7 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
                     gift.priority, 
                     gift.link || null, 
                     gift.notes || null, 
-                    imagePath // Salviamo il percorso del file nel DB
+                    imagePath 
                 ]
             );
         }
@@ -55,13 +62,12 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
 
     } catch (error) {
         await client.query('ROLLBACK');
-        console.error(error);
+        console.error("Errore creazione wishlist:", error);
         res.status(500).json({ msg: "Errore durante la creazione della wishlist" });
     } finally {
         client.release();
     }
 }
-    
 
 async function getPublicWishlist(req: Request, res: Response): Promise<void> {
     const { token } = req.params; 
@@ -90,7 +96,7 @@ async function getPublicWishlist(req: Request, res: Response): Promise<void> {
 
                 return {
                     ...row,
-                    image: imageUrl 
+                    image_url: imageUrl 
                 };
             })
         };
