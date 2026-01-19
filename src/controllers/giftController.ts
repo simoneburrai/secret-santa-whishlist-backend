@@ -4,9 +4,9 @@ import pool from "../config/db";
 async function reserveGift(req: Request, res: Response, _next: NextFunction){
     let { id } = req.params; 
 
-    const { reserve_message } = req.body;
+    const { reserveMessage } = req.body;
 
-    const cleanMessage = reserve_message?.trim() || null;
+    const cleanMessage = reserveMessage?.trim() || null;
 
     try {
         if(!id){
@@ -21,7 +21,7 @@ async function reserveGift(req: Request, res: Response, _next: NextFunction){
         }
 
         const query = `
-            UPDATE gift 
+            UPDATE gifts 
             SET is_reserved = true, 
                 reserve_message = $1 
             WHERE id = $2 AND is_reserved = false

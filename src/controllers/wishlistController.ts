@@ -37,13 +37,17 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
         
         const wishlistId = newWishlist.rows[0].id; // Questo lo avevi già
 
+        console.log("FILES RICEVUTI DA MULTER:", files.map(f => f.fieldname));
 
         for (let i = 0; i < gifts.length; i++) {
             const gift = gifts[i];
             
-            // Ora .find() non fallirà perché files è almeno un array vuoto []
             const giftFile = files.find(f => f.fieldname === `gift_image_${i}`);
-            const imagePath = giftFile ? giftFile.path : null;
+
+            // Trasformiamo "public/uploads/file.jpg" in "uploads/file.jpg"
+            const imagePath = giftFile 
+                ? giftFile.path.replace(/\\/g, '/').replace('public/', '') 
+                : gift.image_url;
 
             await client.query(
                 `INSERT INTO gifts (wishlist_id, name, price, priority, link, notes, image_url) 
@@ -89,6 +93,8 @@ async function getPublicWishlist(req: Request, res: Response): Promise<void> {
         g.priority,
         g.link,
         g.notes,
+        g.is_reserved,
+        g.reserve_message,
         g.image_url
     FROM wishlists w
     LEFT JOIN users u ON w.user_id = u.id
@@ -115,11 +121,13 @@ async function getPublicWishlist(req: Request, res: Response): Promise<void> {
                     price: row.price,
                     priority: row.priority,
                     link: row.link,
+                    isReserved: row.is_reserved,
+                    reserveMessage: row.reserve_message,
                     notes: row.notes,
                     // Sostituisce i backslash con slash e rimuove eventuali doppi slash
-                    image: row.image 
-                        ? `${baseUrl}/${row.image.replace(/\\/g, '/').replace(/^\/+/, '')}` 
-                        : null
+                    image: row.image_url 
+                    ? `${baseUrl}/${row.image_url.replace(/\\/g, '/').replace(/^\/+/, '')}` 
+                    : null
                 }))
         };
 
@@ -168,17 +176,97 @@ async function deleteWishlist(req: AuthenticatedRequest , res: Response): Promis
     }
 }
 
-async function updateWishlist(req: AuthenticatedRequest , res: Response): Promise<void>{
+async function updateWishlist(req: AuthenticatedRequest, res: Response): Promise<void> {
+    const client = await pool.connect();
+    
     try {
-         if (!req.user) {
+        if (!req.user) {
             res.status(401).json({ msg: "Utente non autenticato" });
             return;
         }
-        // L'ID dell'utente lo prendiamo dal TOKEN, non dai parametri!
-        const userId = req.user.id; 
+
+        const userId = Number(req.user.id);
+        const { id } = req.params; // ID della wishlist da aggiornare
+        const { name, gifts: giftsRaw } = req.body;
         
+        // Parsing dei regali se arrivano come stringa JSON (FormData)
+        const gifts = typeof giftsRaw === "string" ? JSON.parse(giftsRaw) : giftsRaw;
+        const files = (req.files as Express.Multer.File[]) || [];
+
+        await client.query('BEGIN');
+
+        // 1. Verifichiamo che la wishlist appartenga effettivamente all'utente
+        const checkOwnership = await client.query(
+            "SELECT id FROM wishlists WHERE id = $1 AND user_id = $2",
+            [id, userId]
+        );
+
+        if (checkOwnership.rowCount === 0) {
+            res.status(403).json({ msg: "Non hai i permessi per modificare questa wishlist" });
+            return;
+        }
+
+        // 2. Aggiorniamo i dati base della wishlist (es. il nome)
+        await client.query(
+            "UPDATE wishlists SET name = $1 WHERE id = $2",
+            [name, id]
+        );
+
+        // 3. Gestione Regali: Sincronizzazione
+        // Strategia: Identifichiamo i regali da mantenere e cancelliamo gli altri
+        const updatedGiftIds = gifts
+            .filter((g: any) => g.id) // Prendiamo solo quelli che hanno già un ID
+            .map((g: any) => g.id);
+
+        if (updatedGiftIds.length > 0) {
+            // Eliminiamo i regali che non sono più presenti nella lista inviata
+            await client.query(
+                `DELETE FROM gifts WHERE wishlist_id = $1 AND id NOT IN (${updatedGiftIds.join(',')})`,
+                [id]
+            );
+        } else {
+            // Se non ci sono ID, l'utente potrebbe aver rimosso tutto
+            await client.query("DELETE FROM gifts WHERE wishlist_id = $1", [id]);
+        }
+
+        // 4. Inserimento o Aggiornamento dei singoli regali
+        for (let i = 0; i < gifts.length; i++) {
+            const gift = gifts[i];
+            
+            // Gestione immagine (nuova o mantenuta)
+            const giftFile = files.find(f => f.fieldname === `gift_image_${i}`);
+
+            // Trasformiamo "public/uploads/file.jpg" in "uploads/file.jpg"
+            const imagePath = giftFile 
+                ? giftFile.path.replace(/\\/g, '/').replace('public/', '') 
+                : gift.image_url;
+
+            if (gift.id) {
+                // UPDATE regalo esistente
+                await client.query(
+                    `UPDATE gifts SET name = $1, price = $2, priority = $3, link = $4, notes = $5, image_url = $6 
+                     WHERE id = $7 AND wishlist_id = $8`,
+                    [gift.name, gift.price, gift.priority, gift.link || null, gift.notes || null, imagePath, gift.id, id]
+                );
+            } else {
+                // INSERT nuovo regalo
+                await client.query(
+                    `INSERT INTO gifts (wishlist_id, name, price, priority, link, notes, image_url) 
+                     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                    [id, gift.name, gift.price, gift.priority, gift.link || null, gift.notes || null, imagePath]
+                );
+            }
+        }
+
+        await client.query('COMMIT');
+        res.status(200).json({ msg: "Wishlist aggiornata con successo" });
+
     } catch (error) {
-        
+        await client.query('ROLLBACK');
+        console.error("Errore aggiornamento wishlist:", error);
+        res.status(500).json({ msg: "Errore durante l'aggiornamento" });
+    } finally {
+        client.release();
     }
 }
 
