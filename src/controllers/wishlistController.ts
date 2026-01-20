@@ -300,11 +300,51 @@ async function getMyWishlists(req: AuthenticatedRequest , res: Response): Promis
     }
 }
 
+async function addFavorite(req: AuthenticatedRequest, res: Response): Promise<void> {
+    try {
+        if (!req.user) {
+            res.status(401).json({ msg: "Utente non autenticato" });
+            return;
+        }
+
+        const userId = req.user.id; 
+        const { wishlistId } = req.body;
+
+        if (!wishlistId) {
+            res.status(400).json({ msg: "ID wishlist mancante" });
+            return;
+        }
+
+        const result = await pool.query(
+            `INSERT INTO favorites (wishlist_id, user_id) 
+             VALUES ($1, $2) 
+             RETURNING *`, 
+            [wishlistId, userId]
+        );
+
+        // Restituiamo la riga inserita (result.rows[0])
+        res.status(201).json({
+            msg: "Wishlist aggiunta ai preferiti",
+            favorite: result.rows[0]
+        });
+
+    } catch (error: any) {
+        // Gestione errore per duplicati (se l'utente ha già quella wishlist nei preferiti)
+        if (error.code === '23505') {
+            res.status(400).json({ msg: "Questa wishlist è già tra i tuoi preferiti" });
+            return;
+        }
+        console.error(error);
+        res.status(500).json({ msg: "Errore nell'aggiunta lista favorita" });
+    }
+}
+
 
 export {
     createWishlist,
     getPublicWishlist,
     deleteWishlist,
     updateWishlist,
-    getMyWishlists
+    getMyWishlists,
+    addFavorite
 }
