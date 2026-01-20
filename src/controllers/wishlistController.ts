@@ -349,9 +349,9 @@ async function removeFavorite(req: AuthenticatedRequest, res: Response): Promise
         }
 
         const userId = req.user.id; 
-        const { wishlistId } = req.params;
+        const { id } = req.params;
 
-        if (!wishlistId) {
+        if (!id) {
             res.status(400).json({ msg: "ID wishlist mancante" });
             return;
         }
@@ -360,7 +360,7 @@ async function removeFavorite(req: AuthenticatedRequest, res: Response): Promise
             `DELETE FROM favorites 
              WHERE wishlist_id = $1 AND user_id = $2
              RETURNING *`, 
-            [wishlistId, userId]
+            [id, userId]
         );
 
         if (result.rowCount === 0) {
