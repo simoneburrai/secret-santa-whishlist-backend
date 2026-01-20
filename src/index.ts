@@ -7,8 +7,18 @@ import giftRouter from "./routers/giftRouter";
 
 const PORT : number = Number(process.env.PORT) | 3000;
 const app = express();
+const corsOptions = {
+  // Aggiungi l'URL esatto del tuo frontend Vercel
+  origin: [
+    'https://secret-santa-wishlist-one.vercel.app', 
+    'http://localhost:5173' // per i test locali del frontend
+  ],
+  methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+  credentials: true,
+  optionsSuccessStatus: 200
+};
 
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use('/uploads', express.static('public/uploads'));
 

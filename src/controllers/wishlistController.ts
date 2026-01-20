@@ -1,6 +1,6 @@
 import { Response, Request, NextFunction } from "express";
 import pool from "../config/db";
-import type { Wishlist} from "../types";
+import type { Wishlist} from "../types/types";
 
 interface AuthenticatedRequest extends Request {
     user?: { id: string; email: string }; 
@@ -8,6 +8,8 @@ interface AuthenticatedRequest extends Request {
 
 async function createWishlist(req: AuthenticatedRequest, res: Response): Promise<void> {
     const client = await pool.connect();
+
+    console.log("FILES RICEVUTI:", req.files)
     
     try {
         if (!req.user) {
@@ -42,12 +44,11 @@ async function createWishlist(req: AuthenticatedRequest, res: Response): Promise
         for (let i = 0; i < gifts.length; i++) {
             const gift = gifts[i];
             
-            const giftFile = files.find(f => f.fieldname === `gift_image_${i}`);
+            const giftFile = (files as any[]).find(f => f.fieldname === `gift_image_${i}`);
 
-            // Trasformiamo "public/uploads/file.jpg" in "uploads/file.jpg"
             const imagePath = giftFile 
-                ? giftFile.path.replace(/\\/g, '/').replace('public/', '') 
-                : gift.image_url;
+            ? (giftFile.secure_url || giftFile.path || giftFile.url) 
+            : (gift.image_url || null);
 
             await client.query(
                 `INSERT INTO gifts (wishlist_id, name, price, priority, link, notes, image_url) 
@@ -124,10 +125,7 @@ async function getPublicWishlist(req: Request, res: Response): Promise<void> {
                     isReserved: row.is_reserved,
                     reserveMessage: row.reserve_message,
                     notes: row.notes,
-                    // Sostituisce i backslash con slash e rimuove eventuali doppi slash
-                    image: row.image_url 
-                    ? `${baseUrl}/${row.image_url.replace(/\\/g, '/').replace(/^\/+/, '')}` 
-                    : null
+                    image: row.image_url || null
                 }))
         };
 
@@ -233,13 +231,12 @@ async function updateWishlist(req: AuthenticatedRequest, res: Response): Promise
         for (let i = 0; i < gifts.length; i++) {
             const gift = gifts[i];
             
-            // Gestione immagine (nuova o mantenuta)
-            const giftFile = files.find(f => f.fieldname === `gift_image_${i}`);
+            const giftFile = (files as any[]).find(f => f.fieldname === `gift_image_${i}`);
 
-            // Trasformiamo "public/uploads/file.jpg" in "uploads/file.jpg"
             const imagePath = giftFile 
-                ? giftFile.path.replace(/\\/g, '/').replace('public/', '') 
+                ? (giftFile.secure_url || giftFile.path) 
                 : gift.image_url;
+
 
             if (gift.id) {
                 // UPDATE regalo esistente

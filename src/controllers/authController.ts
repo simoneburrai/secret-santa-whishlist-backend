@@ -1,6 +1,6 @@
 import { Response, Request, NextFunction } from "express";
 import pool from "../config/db";
-import type { User } from "../types";
+import type { User } from "../types/types";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 
