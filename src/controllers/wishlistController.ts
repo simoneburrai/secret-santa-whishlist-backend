@@ -347,7 +347,7 @@ async function removeFavorite(req: AuthenticatedRequest, res: Response): Promise
         }
 
         const userId = req.user.id; 
-        const { wishlistId } = req.body;
+        const { wishlistId } = req.params;
 
         if (!wishlistId) {
             res.status(400).json({ msg: "ID wishlist mancante" });

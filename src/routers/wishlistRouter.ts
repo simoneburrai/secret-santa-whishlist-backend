@@ -21,6 +21,6 @@ wishlistRouter.get("/public/:token", getPublicWishlist);
 wishlistRouter.delete("/:id", authMiddleware, deleteWishlist);
 wishlistRouter.put("/:id", authMiddleware, upload.any(), updateWishlist);
 wishlistRouter.post("/favorites", authMiddleware, addFavorite );
-wishlistRouter.delete("/favorites", authMiddleware, removeFavorite );
+wishlistRouter.delete("/favorites/:id", authMiddleware, removeFavorite );
 
 export default wishlistRouter;
